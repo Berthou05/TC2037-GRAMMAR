@@ -1,4 +1,9 @@
-# Formal Grammar Design and LL(1) Analysis of a SQL Subset
+# Evidence: Grammar Generation and Cleaning
+## Formal Grammar Design and LL(1) Analysis of a SQL Subset
+
+**Author:** Alexis Yaocalli Berthou Haas 
+**Course:** TC2037
+**Date:** 28/04/2026
 
 ## 1. Introduction
 
