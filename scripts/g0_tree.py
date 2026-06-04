@@ -1,19 +1,16 @@
-import nltk
 import sys
+
+import nltk
 from nltk import CFG
-from nltk.parse import ChartParser
 
-def read_sentence():
-    if len(sys.argv) != 2:
-        print('Usage: python scripts/g0_tree.py "SELECT ... ;"')
-        raise SystemExit(1)
-    return sys.argv[1].strip()
 
-# Ambiguous base grammar G0
-grammar = CFG.fromstring("""
+# G0 is the first grammar. It shows the two problems:
+# ambiguity and left recursion.
+GRAMMAR = CFG.fromstring("""
     Query -> 'SELECT' SelectList 'FROM' TableList WhereClause ';'
 
     WhereClause -> 'WHERE' Expr
+    WhereClause ->
 
     SelectList -> SelectList ',' Column
     SelectList -> Column
@@ -36,19 +33,21 @@ grammar = CFG.fromstring("""
     Expr -> 'str'
 """)
 
-parser = ChartParser(grammar)
 
-sentence = read_sentence()
-tokens = sentence.split()
+if len(sys.argv) != 2:
+    print('Usage: python scripts/g0_tree.py "SELECT ... ;"')
+    sys.exit(1)
 
-trees = list(parser.parse(tokens))
+sentence = sys.argv[1].strip()
+parser = nltk.ChartParser(GRAMMAR)
+trees = list(parser.parse(sentence.split()))
 
 print("Tested string:")
 print(sentence)
 print()
 print("Number of parse trees:", len(trees))
 
-for i, tree in enumerate(trees, start=1):
-    print(f"\\nParse tree {i}:")
+for tree_number, tree in enumerate(trees, start=1):
+    print(f"\nParse tree {tree_number}:")
     print(tree)
     tree.pretty_print()

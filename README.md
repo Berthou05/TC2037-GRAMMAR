@@ -7,22 +7,16 @@
 
 ## 1. Introduction
 
-When working with languages such as SQL, one of the main challenges is determining whether a given query is valid. Instead of relying on intuition, this problem can be addressed formally using grammars, which define the structure that valid strings of a language must follow.
+When working with languages such as SQL, one of the main challenges is determining whether a given query is valid. Instead of relying on intuition, this problem can be addressed formally using grammars, which define the structure that valid strings of a language must follow. A grammar provides a set of rules that describe how strings can be constructed. A string is considered valid if it can be derived from a start symbol by applying these rules (Hopcroft et al., 2008). This idea allows us to move from informal validation to a precise and verifiable process.
 
-A grammar provides a set of rules that describe how strings can be constructed. A string is considered valid if it can be derived from a start symbol by applying these rules (Hopcroft et al., 2008). This idea allows us to move from informal validation to a precise and verifiable process.
-
-In this project, the goal is to construct a grammar for a restricted subset of SQL. The process does not begin with a perfect solution. Instead, it starts with a simple grammar that captures the natural structure of queries, even if it contains issues such as ambiguity and left recursion.
-
-From this starting point, the grammar is analyzed and transformed step by step. The objective is not only to obtain a working grammar, but to understand how and why each transformation is applied, and how these changes affect parsing.
+In this project, the goal is to construct a grammar for a restricted subset of SQL. The process does not begin with a perfect solution. Instead, it starts with a simple grammar that captures the natural structure of queries, even if it contains issues such as ambiguity and left recursion. From this starting point, the grammar is analyzed and transformed step by step. The objective is not only to obtain a working grammar, but to understand how and why each transformation is applied, and how these changes affect parsing.
 
 
 ## 2. SQL Subset
 
 SQL, or Structured Query Language, is a database language used to define, query, and manipulate data in relational database systems. In relational databases, information is organized in tables, and SQL queries allow users to retrieve specific data from those tables through structured clauses such as `SELECT`, `FROM`, and `WHERE` (Silberschatz et al., 2019).
 
-SQL is a useful language for this project because its structure can be represented through grammar rules. A query is not just a random sequence of words. Its clauses must appear in a specific order, and expressions inside conditions must follow syntactic rules. This makes SQL appropriate for analyzing grammar design, ambiguity, left recursion, and parsing.
-
-However, SQL is too large to model completely in this project. Real SQL includes many features such as joins, aliases, grouping, ordering, nested queries, aggregate functions, and implementation-specific extensions. Since the objective of this work is to study formal grammar transformation and LL(1) parsing, the language must be restricted to a smaller subset.
+SQL is a useful language for this project because its structure can be represented through grammar rules. A query is not just a random sequence of words. Its clauses must appear in a specific order, and expressions inside conditions must follow syntactic rules. This makes SQL appropriate for analyzing grammar design, ambiguity, left recursion, and parsing. However, SQL is too large to model completely in this project. Real SQL includes many features such as joins, aliases, grouping, ordering, nested queries, aggregate functions, and implementation-specific extensions. Since the objective of this work is to study formal grammar transformation and LL(1) parsing, the language must be restricted to a smaller subset.
 
 The subset modeled in this report follows this general form:
 
@@ -60,7 +54,34 @@ SELECT id . id FROM id ;
 
 In this representation, `id`, `num`, and `str` are terminal symbols. They represent identifiers, numeric literals, and string literals, respectively. This is consistent with the formal definition of a grammar `G = (V, T, P, S)`, where `T` is the set of terminal symbols used to form strings of the language (Hopcroft et al., 2008).
 
-This abstraction is necessary because a grammar describes structure, not vocabulary. Enumerating all possible identifiers, numbers, or strings would not be practical and would shift the project toward lexical specification instead of syntactic analysis. By using token categories, the grammar remains finite, general, and focused on whether a query has a valid structure.
+I use this abstraction because the grammar is meant to describe structure, not every possible word that could appear in a database. If I tried to include all table names, column names, numbers, or strings, the grammar would stop being general. It would become a long list of examples. Using `id`, `num`, and `str` keeps the grammar smaller and lets it focus on the form of the query.
+
+### 2.1 Representative Table and Column Model
+
+Even though the grammar uses token categories, the project can still start from realistic SQL-like queries. To show that, I use a small example schema:
+
+| Table | Columns |
+| --- | --- |
+| `clients` | `id`, `name`, `age`, `city` |
+| `orders` | `id`, `client_id`, `total` |
+
+With this schema, a concrete query could be written as:
+
+```sql
+SELECT clients.name, orders.total
+FROM clients, orders
+WHERE clients.id = orders.client_id AND orders.total < 1000;
+```
+
+The grammar does not need to store the words `clients`, `orders`, `name`, or `total`. Before parsing, those concrete values are substituted by token categories:
+
+```text
+SELECT id . id , id . id FROM id , id WHERE id . id = id . id AND id . id < num ;
+```
+
+This keeps the grammar general. The parser checks the shape of the query: selected columns, source tables, operators, and clause order. Then a separate dictionary can check if the table or column names really exist.
+
+This separation is important. Syntax answers: "does the query have the correct form?" The schema dictionary answers: "do these names exist?" Those are related questions, but they are not the same question. Rows are not included for the same reason. A row is data inside a table, not part of the grammar of the query. For example, the value `1000` can be represented as `num`, but the grammar should not store every possible order total or client name.
 
 The supported features are limited to:
 
@@ -91,7 +112,7 @@ Because expressions are part of the language, operator precedence must also be c
 OR < AND < relational (=, <) < + < *
 ```
 
-The initial grammar `G0` deliberately does not enforce this precedence. This omission is intentional because it allows ambiguity to appear clearly in the first grammar. Later, the grammar is transformed so that these precedence levels are encoded directly into the grammar.
+The initial grammar `G0` deliberately does not enforce this precedence.
 
 ## 3. First Step: Base Grammar G0
 
@@ -102,7 +123,7 @@ The first grammar, called `G0`, is intentionally written before any cleaning tra
 - Direct left recursion
 - Ambiguity
 
-The grammar is therefore not the final grammar. It is the formal starting point for the development process.
+So `G0` is not supposed to be perfect. It is the starting grammar that I will clean in the next sections.
 
 ### 3.2 Grammar Definition
 
@@ -289,11 +310,9 @@ Both derivations generate the same terminal sequence, but they assign a differen
 
 ### 5.1 Formal Strategy
 
-After proving that `G0` is ambiguous, the next step is to remove the ambiguity without changing the intended language. The issue is that all expression operators are introduced through the same non-terminal, `Expr`. To fix this, the grammar is rewritten so that operator precedence is encoded directly into the grammar.
+After proving that `G0` is ambiguous, the next step is to remove the ambiguity without changing the intended language. The issue is that all expression operators are introduced through the same non-terminal, `Expr`. To fix this, the grammar is rewritten so that operator precedence is encoded directly into the grammar. In general, ambiguity is removed by analyzing the source of the multiple parse structures and rewriting the grammar so that only the intended structure remains. 
 
-In general, ambiguity is removed by analyzing the source of the multiple parse structures and rewriting the grammar so that only the intended structure remains. In this grammar, the source of ambiguity is operator precedence, so the appropriate solution is to separate expressions into precedence levels.
-
-Instead of using one non-terminal for every expression operator, the grammar is divided into expression levels. Each level handles a specific group of operators. Operators with lower precedence appear higher in the grammar, while operators with higher precedence appear deeper in the grammar.
+In this grammar, the source of ambiguity is operator precedence, so the appropriate solution is to separate expressions into precedence levels. Instead of using one non-terminal for every expression operator, the grammar is divided into expression levels. Each level handles a specific group of operators. Operators with lower precedence appear higher in the grammar, while operators with higher precedence appear deeper in the grammar.
 
 The intended precedence is:
 
@@ -620,9 +639,9 @@ These NLTK results provide implementation evidence that the grammars parse the s
 
 ## 9. Final Grammar G2
 
-After removing ambiguity and direct left recursion, the final grammar is called `G2`. This grammar preserves the SQL subset defined earlier, but it is now structured for LL(1) validation.
+After removing ambiguity and direct left recursion, the final grammar is called `G2`. It still represents the same SQL subset, but now it is written in a way that can be checked as LL(1).
 
-Although `G2` was introduced in the previous transformation section, it is repeated here because this is the exact version used for implementation and LL(1) validation.
+I repeat it here because this is the exact version used in the Python tests and in the LL(1) validation.
 
 ```text
 Query       → SELECT SelectList FROM TableList WhereClause ;
@@ -659,7 +678,9 @@ This grammar is the version used for the NLTK implementation tests and the LL(1)
 
 ## 10. Implementation Tests with NLTK
 
-The Python scripts in this project are used to reproduce the grammar tests and to try additional tokenized SQL strings. They provide implementation evidence that the grammars accept and reject representative strings. They do not replace the formal LL(1) validation, because NLTK's chart parser can parse context-free grammars without proving that the grammar is LL(1).
+The Python scripts are used to check that the grammars behave as explained in the report. Most tests use tokenized input directly, because that is what the grammar reads. I also added one script with concrete SQL-like queries, so it is clearer how a normal-looking query becomes grammar input.
+
+These scripts are evidence that the grammars accept and reject the examples I expect. They do not replace the LL(1) analysis, because NLTK can parse context-free grammars even when they are not LL(1).
 
 ### 10.1 Script Organization
 
@@ -672,34 +693,168 @@ All Python files are stored in the `scripts/` folder:
 | `scripts/g2_tree.py` | Parses one sentence with `G2`, after left recursion removal. | `python scripts/g2_tree.py "SELECT id . id FROM id , id WHERE id . id = num OR id . id = num ;"` |
 | `scripts/run_tree.py` | Calls one of the tree scripts for the common comparison sentence. | `python scripts/run_tree.py g0`, `python scripts/run_tree.py g1`, or `python scripts/run_tree.py g2` |
 | `scripts/g_final_tests.py` | Runs the final accepted and rejected test suite for `G2`, or checks one custom input string. | `python scripts/g_final_tests.py` |
+| `scripts/concrete_query_tests.py` | Converts concrete SQL-like queries into grammar tokens and optionally checks them against a small schema dictionary. | `python scripts/concrete_query_tests.py` |
 
-### 10.2 Running the Provided Test Suite
+### 10.2 Running the Scripts on Windows and Linux/macOS
+
+Run these commands from the main folder of the project, the same folder where this `README.md` file is located. Do not enter the `scripts/` folder before running them.
+
+The scripts use Python and NLTK. If NLTK is not installed, install it first:
+
+On Windows PowerShell:
+
+```powershell
+python -m pip install nltk
+```
+
+On Linux or macOS:
+
+```bash
+python3 -m pip install nltk
+```
+
+The main tests are:
+
+Windows PowerShell:
+
+```powershell
+python scripts\g_final_tests.py
+python scripts\concrete_query_tests.py
+python scripts\run_tree.py g0
+python scripts\run_tree.py g1
+python scripts\run_tree.py g2
+```
+
+Linux or macOS:
+
+```bash
+python3 scripts/g_final_tests.py
+python3 scripts/concrete_query_tests.py
+python3 scripts/run_tree.py g0
+python3 scripts/run_tree.py g1
+python3 scripts/run_tree.py g2
+```
+
+If your Windows installation uses the `py` launcher, the same commands also work by replacing `python` with `py`. The most important commands are `g_final_tests.py` for the final grammar and `concrete_query_tests.py` for the concrete-query examples.
+
+### 10.3 Running the Provided Test Suite
 
 To run all accepted and rejected tests for the final grammar, use:
 
-```text
-python scripts/g_final_tests.py
+```powershell
+python scripts\g_final_tests.py
 ```
 
-With no arguments, the script runs the built-in test suite. For each input, it prints the expected result, the actual result, the number of parse trees, and whether the test passed.
+On Linux or macOS, the equivalent command is:
 
-### 10.3 Testing a Custom String
+```bash
+python3 scripts/g_final_tests.py
+```
 
-To test a custom tokenized SQL string with the final grammar `G2`, pass the string as an argument:
+With no arguments, the script runs the built-in test suite. For each input, it prints the expected result, the actual result, the number of parse trees, and whether the test passed. If any test fails, the program exits with an error code.
 
-```text
-python scripts/g_final_tests.py "SELECT id . id FROM id WHERE id . id = num ;"
+### 10.4 Testing a Custom String
+
+To test a custom tokenized SQL string with the final grammar `G2`, pass the string as an argument.
+
+Windows:
+
+```powershell
+python scripts\g_final_tests.py "SELECT id . id FROM id WHERE id . id = num ;"
+```
+
+Linux or macOS:
+
+```bash
+python3 scripts/g_final_tests.py "SELECT id . id FROM id WHERE id . id = num ;"
 ```
 
 The custom mode prints the input, whether `G2` accepts or rejects it, and the number of parse trees. This is useful for testing additional examples without editing the script.
 
-The tree scripts also accept custom strings. They are useful when the parse tree itself is needed:
+The concrete-query script can also receive a realistic SQL-like string. In that case, it first prints the tokenized version and then reports both checks: syntax according to `G2`, and schema validity according to the small dictionary.
 
-```text
-python scripts/g2_tree.py "SELECT id . id FROM id WHERE id . id = num ;"
+Windows:
+
+```powershell
+python scripts\concrete_query_tests.py "SELECT clients.name FROM clients WHERE clients.age < 30;"
 ```
 
-### 10.4 Test Cases Used in the Report
+Linux or macOS:
+
+```bash
+python3 scripts/concrete_query_tests.py "SELECT clients.name FROM clients WHERE clients.age < 30;"
+```
+
+The tree scripts also accept custom strings. They are useful when the parse tree itself is needed.
+
+Windows:
+
+```powershell
+python scripts\g2_tree.py "SELECT id . id FROM id WHERE id . id = num ;"
+```
+
+Linux or macOS:
+
+```bash
+python3 scripts/g2_tree.py "SELECT id . id FROM id WHERE id . id = num ;"
+```
+
+### 10.5 Lexical, Syntax, and Schema Validation
+
+The implementation separates three checks because they answer different questions.
+
+The lexical or substitution step asks: "what kind of token is this?" It recognizes concrete names, numbers, string literals, and punctuation. In this project the step is intentionally small. Names such as `clients` and `name` become `id`, numeric values such as `1000` become `num`, and quoted values such as `'Monterrey'` become `str`.
+
+The syntax step asks: "does the token stream follow the grammar?" This is where `G2` is used. For example, it checks that selected columns have the form `id . id`, that the query contains the required `SELECT` and `FROM` clauses, and that a `WHERE` clause has a valid expression.
+
+The schema step asks: "do the concrete names exist in the example database model?" This happens after parsing and uses a small dictionary. The dictionary can reject `clients.email` because `email` is not listed as a column, but that does not make the grammar wrong. It only means the concrete query fails the optional semantic check.
+
+### 10.6 Testing Concrete Queries
+
+The script `scripts/concrete_query_tests.py` shows the small bridge between real-looking input and the grammar. It is not a full SQL lexer or a database engine. It only does the substitutions needed for this project.
+
+The script separates punctuation such as `.`, `,`, `;`, `=`, and `<`. It keeps SQL keywords such as `SELECT`, `FROM`, `WHERE`, `AND`, and `OR`. Then it changes real names into `id`, numbers into `num`, and quoted text into `str`. The result is sent to the final grammar `G2`.
+
+For example:
+
+```sql
+SELECT clients.name, orders.total FROM clients, orders WHERE clients.id = orders.client_id AND orders.total < 1000;
+```
+
+is converted into:
+
+```text
+SELECT id . id , id . id FROM id , id WHERE id . id = id . id AND id . id < num ;
+```
+
+The same script also includes a small schema dictionary:
+
+```text
+clients: age, city, id, name
+orders: client_id, id, total
+```
+
+This dictionary is not part of the grammar. It is included to show how the project could be extended after syntactic parsing, without changing the formal grammar itself.
+
+For instance, the concrete query `SELECT clients.email FROM clients ;` becomes:
+
+```text
+SELECT id . id FROM id ;
+```
+
+The grammar accepts that token stream because the structure is valid. The dictionary rejects the concrete query because `email` is not listed as a column of `clients`.
+
+This is why the final grammar does not contain every possible column or row. If all concrete names were part of the grammar, then a different database would need a different grammar. In this project, the grammar stays the same and only the example dictionary changes.
+
+This creates a clear workflow:
+
+```text
+Concrete query -> tokenized query -> grammar parser -> optional schema dictionary check
+```
+
+The main focus remains the grammar. The substitution step only makes it easier to test multiple realistic cases without rewriting the grammar for each possible table name, column name, number, or string.
+
+### 10.7 Test Cases Used in the Report
 
 | Test string | Expected result | Explanation |
 | --- | --- | --- |
@@ -708,6 +863,7 @@ python scripts/g2_tree.py "SELECT id . id FROM id WHERE id . id = num ;"
 | `SELECT id . id FROM id , id ;` | Accepted | The table list is valid because `TableListTail` allows comma-separated tables. |
 | `SELECT id . id FROM id WHERE id . id = num ;` | Accepted | The `WHERE` clause contains a valid relational expression. |
 | `SELECT id . id FROM id , id WHERE id . id = num OR id . id = num ;` | Accepted | The expression uses `OR` through `ExprTail`. |
+| `SELECT id . id , id . id FROM id , id WHERE id . id = id . id AND id . id < num ;` | Accepted | Represents a realistic query with two selected columns, two tables, a column-to-column comparison, and a numeric comparison. |
 | `SELECT id . id FROM id WHERE id . id + num * num < num ;` | Accepted | The expression follows arithmetic and relational precedence through `AddExpr`, `MulExpr`, and `RelExpr`. |
 | `SELECT id . id FROM id WHERE ( id . id = num ) AND id . id = str ;` | Accepted | Parentheses and `AND` are valid through `Primary` and `AndExprTail`. |
 | `SELECT FROM id ;` | Rejected | The query is missing a valid `SelectList`. |
@@ -718,11 +874,11 @@ python scripts/g2_tree.py "SELECT id . id FROM id WHERE id . id = num ;"
 | `SELECT id FROM id ;` | Rejected | Column references must follow the qualified form `id . id`. |
 | `SELECT id . id FROM id WHERE id = num ;` | Rejected | Column references inside expressions must also use the qualified form `id . id`. |
 
-The expected behavior is that every accepted string produces one parse tree with the final grammar, and every rejected string produces zero parse trees.
+For the final grammar, the accepted strings should produce one parse tree. The rejected strings should produce zero parse trees.
 
-Running `python scripts/g_final_tests.py` produced `PASS` for all 14 tests: the 7 accepted strings produced one parse tree each, and the 7 rejected strings produced zero parse trees each.
+When I ran `python scripts/g_final_tests.py`, all 15 tests passed. The 8 accepted strings produced one parse tree each, and the 7 rejected strings produced zero parse trees.
 
-These tests verify syntactic validity according to the grammar. They do not verify semantic database correctness, such as whether a table or column actually exists.
+These tests only check syntax. They do not check if a real table or column exists. That second idea is shown separately in `scripts/concrete_query_tests.py`.
 
 A sample of the execution output is shown below:
 
@@ -856,18 +1012,19 @@ For the second token stream:
 ```text
 SELECT id . id FROM id , id WHERE id . id = num OR id . id = num ;
 ```
-
-the parser produced the following parse tree:
+The parser produced the following parse tree:
 
 ![Princeton parse tree for the second token stream](images/image-17.png)
 
+The parse tree becomes a bit hard to read because the grammar is wider after left recursion elimination, but it still shows the intended structure. The `SELECT` clause contains one column, and the `FROM` clause contains two tables. The `WHERE` clause contains an `OR` expression that connects two equality expressions. 
+
 The second token stream was also accepted. The parser used `TableListTail` to process the second table and `ExprTail` to process the `OR` expression inside the `WHERE` clause.
 
-These tool results support the predictive parsing behavior of `G2`. They do not replace the formal explanation of the grammar, but they provide concrete evidence that the generated FIRST sets, FOLLOW sets, parsing table, and parsing steps are consistent with the intended LL(1) behavior.
+These tool results support the predictive parsing behavior of `G2`. They provide concrete evidence that the generated FIRST sets, FOLLOW sets, parsing table, and parsing steps are consistent with the intended LL(1) behavior.
 
 ## 12. Chomsky Hierarchy Classification
 
-The grammars in this report are classified as Type 2 grammars in the Chomsky hierarchy. A Type 2 grammar, also called a context-free grammar, has productions whose left-hand side is a single non-terminal symbol (Hopcroft et al., 2008).
+The grammars discussed in this report are Type 2 grammars in the Chomsky hierarchy. Type 2 grammars are also known as context-free grammars. In this kind of grammar, each rule has a single non-terminal symbol on the left side, which is then replaced by other symbols according to the grammar’s rules (Hopcroft et al., 2008).
 
 ### 12.1 Classification of G0
 
@@ -896,41 +1053,86 @@ Therefore, the transformations from `G0` to `G2` changed the parsing properties 
 
 ## 13. Complexity Analysis
 
-Parsing complexity depends on the parsing algorithm used. For that reason, the complexity discussion must distinguish between the grammar itself and the parser applied to it. This distinction is important because the grammar alone does not determine the running time; the parsing algorithm determines how the grammar is processed.
+The final grammar `G2` is the only grammar analyzed in this section. The earlier grammars are useful for showing the transformation process, but the implemented result is `G2`, so the complexity analysis should focus on how this final grammar is processed by the tools used in the project.
 
-### 13.1 Ambiguous Grammar G0
+Parsing complexity depends on the parsing algorithm, not only on the grammar. In this project there are two relevant tools:
 
-The grammar `G0` is not suitable for deterministic predictive parsing because it is ambiguous and left-recursive. With the tested input, NLTK generated 5 parse trees for one string. This shows that a parser capable of returning multiple parse trees may need to represent more than one syntactic structure for the same input.
-
-The cost of parsing `G0` therefore depends on the parsing method. A general context-free parser, such as a chart parser, can handle ambiguous grammars, but ambiguity can increase the amount of output because the parser may need to report several parse trees. Thus, it would be imprecise to assign one fixed time complexity to `G0` without specifying the parser and whether all parse trees are being generated.
-
-### 13.2 LL(1) Grammar G2
-
-The grammar `G2` is designed for LL(1) predictive parsing. An LL(1) parser uses a parsing table and one lookahead symbol to choose productions deterministically (Linz & Rodger, 2022). Since each table cell contains at most one production, the parser does not need to backtrack or compare multiple possible derivations.
-
-Because predictive parsing processes the input from left to right with deterministic table decisions, LL(1) parsing runs in linear time with respect to the length of the input (Linz & Rodger, 2022). For an input of length `n`, this is written as `O(n)`. The stack may expand non-terminals before matching terminals, but the parsing decisions are deterministic and table-driven.
-
-### 13.3 Comparison
-
-The main difference between `G0` and `G2` is not their Chomsky type, since both are context-free. The difference is their parsing behavior.
-
-| Grammar | Main property | Parsing implication |
+| Tool | Role in the project | What it means for complexity |
 | --- | --- | --- |
-| `G0` | Ambiguous and left-recursive | Not suitable for LL(1) predictive parsing; may produce multiple parse trees depending on the parser. |
-| `G1` | Unambiguous for the tested expression, but still left-recursive | Operator precedence is fixed, but direct left recursion still prevents LL(1) parsing. |
-| `G2` | Removes the demonstrated ambiguity and direct left recursion | Suitable for LL(1) validation and deterministic predictive parsing. |
+| NLTK `ChartParser` | Used by the Python scripts to test accepted and rejected strings. | It is a general chart parser, so its behavior is broader than an LL(1) parser. |
+| Princeton LL(1) Parser Tool | Used to validate FIRST sets, FOLLOW sets, and the LL(1) parsing table. | It represents the predictive parsing behavior intended for the final grammar. |
 
-Therefore, the transformations improve the grammar from a parsing perspective. They do not make the language more expressive; instead, they make the same intended SQL subset easier to parse deterministically.
+### 13.1 NLTK ChartParser
+
+The Python tests use NLTK's `ChartParser`. According to the NLTK documentation, chart parsers use dynamic programming, store partial parsing hypotheses as chart edges, and keep adding edges until no new edges can be added (NLTK Project, 2026). The documentation also explains that `ChartParser` returns complete parses from the chart.
+
+This is useful for the project because the same tool can parse `G0`, `G1`, and `G2`, including the ambiguous first grammar. However, it also means that NLTK is not the final complexity model for `G2`. A chart parser is a general context-free parsing tool. It can represent multiple possible parses, and when a script asks for all parse trees, the output cost also depends on how many trees are generated.
+
+For the final grammar tests, every accepted string produces exactly one parse tree. In practice, the test cases are small and deterministic. Still, the role of NLTK in this project is evidence and experimentation, not the formal claim that the parser runs as an LL(1) compiler.
+
+### 13.2 LL(1) Parsing of G2
+
+The final grammar `G2` was designed to be LL(1). The Princeton tool checks this by computing nullable, FIRST, and FOLLOW information and then generating the LL(1) transition table (Princeton COS 320, 2020). The important result is that the table has no conflicting cells.
+
+Once the grammar has a conflict-free LL(1) table, parsing is deterministic. At each step, the parser only needs:
+
+1. the non-terminal on top of the stack,
+2. the next input token,
+3. one table lookup to choose the production.
+
+For an input with `n` tokens, the parser reads the input from left to right. Each terminal match consumes one input token. Non-terminal expansions add grammar symbols to the stack, but `G2` has a fixed number of productions and fixed maximum production length. Therefore, the number of parser actions grows linearly with the number of input tokens.
+
+The time complexity of parsing `G2` with an LL(1) predictive parser is:
+
+```text
+O(n)
+```
+
+where `n` is the number of tokens in the tokenized query.
+
+The space complexity is also linear in the size of the input in the normal predictive-parsing model:
+
+```text
+O(n)
+```
+
+This space is mainly used by the parser stack and the input stream. The parsing table itself is constant for this project because the grammar does not change while parsing a query.
+
+### 13.3 Token Substitution and Dictionary Check
+
+The concrete-query script adds two simple steps before and after grammar parsing.
+
+Before parsing, it substitutes concrete words and numbers into grammar tokens. This step scans the query once and produces a token stream, so it is linear:
+
+```text
+O(n)
+```
+
+After parsing, the optional schema dictionary check verifies that referenced tables and columns exist in the example schema. Dictionary and set lookups are treated as constant-time operations on average, so this step is also linear in the number of tokens or references checked.
+
+The complete practical workflow is therefore:
+
+```text
+token substitution: O(n)
+LL(1) parsing:      O(n)
+dictionary check:   O(n)
+```
+
+Taken together, the workflow remains linear with respect to the length of the input query:
+
+```text
+O(n)
+```
+
+This conclusion applies to the final grammar and the intended LL(1) parsing model. The NLTK chart parser remains useful for testing, but the formal complexity claim for the final parser is based on the LL(1) table-driven behavior validated with the Princeton tool.
 
 ## 14. Conclusion
 
-This project showed the process of designing, transforming, and validating a context-free grammar for a restricted SQL subset. The initial grammar `G0` was useful as a starting point because it represented the intended query structure, but it also contained ambiguity and direct left recursion.
+This project helped me understand context-free grammars in a more practical way, not only as a set of definitions. At the beginning, designing the SQL subset was not the hardest part, because the basic structure of the language was already clear: a query needs `SELECT`, `FROM`, and optionally `WHERE`. The first grammar `G0` was useful because it followed that natural structure, but it also showed why a grammar that looks reasonable at first can still have important problems. In this case, the problems were ambiguity and left recursion. Seeing the same expression produce more than one parse tree made the idea of ambiguity much clearer than only reading the definition, because the problem was no longer abstract. It was visible in the output of the parser.
 
-The ambiguity was removed by separating expression rules into precedence levels, producing `G1`. The remaining direct left recursion was then removed through the standard transformation `A → Aα | β`, producing the final grammar `G2`.
+The most interesting part of the process was cleaning the grammar. Removing ambiguity required planning the expression rules by precedence, instead of leaving every operator at the same level. This produced `G1`, where `OR`, `AND`, relational operators, addition, multiplication, and primary expressions each had their own place in the grammar. After that, the remaining left recursion had to be removed to make the grammar appropriate for LL(1) parsing, which produced `G2`. This part made me understand that cleaning a grammar is not just a mechanical step. Each change affects how a parser will read the input, and a small decision in the grammar can completely change the parse tree. Reading about FIRST sets, FOLLOW sets, parsing tables, and NLTK helped, but implementing the grammars and fixing mistakes over time made the concepts easier to understand.
 
-The final grammar was validated through two forms of evidence. First, NLTK tests showed that representative valid strings were accepted and invalid strings were rejected. Second, the Princeton LL(1) Parser Tool generated FIRST sets, FOLLOW sets, and a parsing table without conflicts. This supports that `G2` is suitable for deterministic LL(1) parsing.
-
-Overall, the transformations did not change the Chomsky classification of the grammar. Both `G0` and `G2` remain Type 2 context-free grammars. What changed was the parsing behavior: the final grammar is clearer, deterministic, and appropriate for predictive parsing.
+Another important part of the project was connecting the formal grammar with more realistic SQL-like examples. The grammar works with tokens such as `id`, `num`, and `str`, so by itself it does not know names like `clients`, `orders`, or `total`. At first this can make the grammar look less realistic, but the concrete-query script helped solve that problem without changing the formal grammar. The script performs a small lexical substitution step, then the grammar checks the tokenized query, and finally the optional schema dictionary checks whether the real table and column names exist. I liked this separation because it made the project feel closer to a real language-processing workflow while still keeping the grammar focused on syntax. In the end, `G0` and `G2` remain Type 2 context-free grammars in the Chomsky hierarchy, but their parsing behavior is very different. The final result is not a bigger language; it is a clearer and more useful version of the same intended SQL subset, supported by automated NLTK tests and by the LL(1) evidence from the Princeton tool.
 
 ## Appendix A. NLTK Test Output
 
@@ -962,6 +1164,12 @@ Parse trees: 1
 Result: PASS
 ------------------------------------------------------------
 Input: SELECT id . id FROM id , id WHERE id . id = num OR id . id = num ;
+Expected: ACCEPT
+Actual: ACCEPT
+Parse trees: 1
+Result: PASS
+------------------------------------------------------------
+Input: SELECT id . id , id . id FROM id , id WHERE id . id = id . id AND id . id < num ;
 Expected: ACCEPT
 Actual: ACCEPT
 Parse trees: 1
@@ -1023,14 +1231,66 @@ Result: PASS
 ------------------------------------------------------------
 ```
 
+## Appendix B. Concrete Query Substitution Output
+
+The complete output of `python scripts/concrete_query_tests.py` is:
+
+```text
+Schema dictionary:
+  clients: age, city, id, name
+  orders: client_id, id, total
+
+Concrete input: SELECT clients.name, orders.total FROM clients, orders WHERE clients.id = orders.client_id AND orders.total < 1000;
+Tokenized input: SELECT id . id , id . id FROM id , id WHERE id . id = id . id AND id . id < num ;
+Syntax: ACCEPT
+Schema dictionary: ACCEPT
+Parse trees: 1
+Result: PASS
+------------------------------------------------------------
+Concrete input: SELECT clients.name FROM clients WHERE clients.age < 30;
+Tokenized input: SELECT id . id FROM id WHERE id . id < num ;
+Syntax: ACCEPT
+Schema dictionary: ACCEPT
+Parse trees: 1
+Result: PASS
+------------------------------------------------------------
+Concrete input: SELECT clients.name FROM clients WHERE clients.city = 'Monterrey';
+Tokenized input: SELECT id . id FROM id WHERE id . id = str ;
+Syntax: ACCEPT
+Schema dictionary: ACCEPT
+Parse trees: 1
+Result: PASS
+------------------------------------------------------------
+Concrete input: SELECT clients.email FROM clients;
+Tokenized input: SELECT id . id FROM id ;
+Syntax: ACCEPT
+Schema dictionary: REJECT
+Parse trees: 1
+Result: PASS
+------------------------------------------------------------
+Concrete input: SELECT clients FROM clients;
+Tokenized input: SELECT id FROM id ;
+Syntax: REJECT
+Schema dictionary: REJECT
+Parse trees: 0
+Result: PASS
+------------------------------------------------------------
+```
+
 ## Use of AI in the Project
 
-AI assistance was used during the development of this report to help format the document, improve wording and review consistency between the grammar, tests, and validation evidence. AI was also used to help refine the Python testing scripts.
+AI was used as a support tool during this project, mainly to review wording, organize explanations, and check that the README matched the Python scripts and test results. It was also useful for finding small inconsistencies in the code comments and for making the run instructions clearer for Windows and Linux/macOS.
+
+The grammar design, the SQL subset, the transformation from `G0` to `G2`, the interpretation of the tests, and the final decisions about what to include in the project were my responsibility. I used AI to help polish and verify the work, but not as a replacement for the design of the grammar or the LL(1) analysis.
 
 ## References
 
 Hopcroft, J. E., Motwani, R., & Ullman, J. D. (2008). *Introduction to automata theory, languages, and computation* (3rd ed.). Pearson.
 
 Linz, P., & Rodger, S. H. (2022). *An introduction to formal languages and automata*. Jones & Bartlett Learning.
+
+NLTK Project. (2026). *nltk.parse.chart module*. https://www.nltk.org/api/nltk.parse.chart.html
+
+Princeton COS 320. (2020). *LL(1) Parser Visualization*. https://www.cs.princeton.edu/courses/archive/spring20/cos320/LL1/
 
 Silberschatz, A., Korth, H. F., & Sudarshan, S. (2019). *Database system concepts* (7th ed.). McGraw-Hill Education.

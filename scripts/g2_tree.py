@@ -1,14 +1,12 @@
-import nltk
 import sys
+
+import nltk
 from nltk import CFG
 
-def read_sentence():
-    if len(sys.argv) != 2:
-        print('Usage: python scripts/g2_tree.py "SELECT ... ;"')
-        raise SystemExit(1)
-    return sys.argv[1].strip()
 
-grammar = CFG.fromstring("""
+# G2 is the final grammar.
+# It keeps the same idea as G1, but removes left recursion.
+GRAMMAR = CFG.fromstring("""
     Query -> 'SELECT' SelectList 'FROM' TableList WhereClause ';'
 
     WhereClause -> 'WHERE' Expr
@@ -52,18 +50,21 @@ grammar = CFG.fromstring("""
     Primary -> 'str'
 """)
 
-parser = nltk.ChartParser(grammar)
 
-sentence = read_sentence()
-tokens = sentence.split()
+if len(sys.argv) != 2:
+    print('Usage: python scripts/g2_tree.py "SELECT ... ;"')
+    sys.exit(1)
+
+sentence = sys.argv[1].strip()
+parser = nltk.ChartParser(GRAMMAR)
+trees = list(parser.parse(sentence.split()))
 
 print("Tested string:")
 print(sentence)
 print()
-trees = list(parser.parse(tokens))
 print("Number of parse trees:", len(trees))
 
-for i, tree in enumerate(trees, start=1):
-    print(f"\nParse tree {i}:")
+for tree_number, tree in enumerate(trees, start=1):
+    print(f"\nParse tree {tree_number}:")
     print(tree)
     tree.pretty_print()
